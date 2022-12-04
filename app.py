@@ -62,9 +62,9 @@ def userLogin():
     user_password = user_data[0]['password']
 
     if (login_user_password == user_password):
-        return Response('Login Successful', status=200)
+        return Response(json.dumps({'message': 'Login Successful'}), status=200)
 
-    return Response("Incorrect username and password", status=400)
+    return Response(json.dumps({'message': "Incorrect username and password"}), status=400)
 
 
 @app.route('/getchildid', methods=['POST'])
@@ -83,7 +83,7 @@ def getChildId():
         tracked_user_id.count = len(tracked_user_id.data)
 
         return Response(tracked_user_id.json(), status=200)
-    return Response("Bad Request", status=400)
+    return Response(json.dumps({'message': "Bad Request"}), status=400)
 
 
 @app.route('/getchildlocation', methods=['POST'])
@@ -106,8 +106,8 @@ def getChildLocation():
             child_location = supabase.table('user_location').select(
                 'lat_long').eq('user_id', child_user_id).execute().data
             child_location_lat_long = child_location[0]['lat_long'][-1]
-            return Response(child_location_lat_long, status=200)
-    return Response("Bad Request", status=400)
+            return Response(json.dumps({'location': child_location_lat_long}), status=200)
+    return Response(json.dumps({'message': "Bad Request"}), status=400)
 
 
 @app.route('/checkdistance', methods=['POST'])
@@ -144,7 +144,7 @@ def checkDistance():
             #     if (push):
             #         return Response(json.dumps({'message': "Push Notification successful"}), status=200)
             return Response(json.dumps({'distance': distance}), status=200)
-    return Response("Bad Request", status=400)
+    return Response(json.dumps({'message': "Bad Request"}), status=400)
 
 
 @app.route("/push", methods=['POST'])
@@ -172,8 +172,11 @@ def push():
 # @app.route("/updatelocation", methods=['POST'])
 # def updateLocation():
 
+#     data = request.get_json()
+
+#     user_id = int(data['user_id'])
 #     update_location = supabase.table('user_location').select(
-#         '*').eq('user_name', login_user_name).execute().data
+#         'user_id').eq("user_id", user_id).execute().data
 
 
 if __name__ == '__main__':
