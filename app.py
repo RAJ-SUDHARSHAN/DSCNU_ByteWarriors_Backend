@@ -239,5 +239,36 @@ def addChildUser():
     return Response(json.dumps({'message': "No Data Available"}), status=200)
 
 
+@app.route('/addtoken', methods=['POST'])
+@cross_origin()
+def addToken():
+
+    data = request.get_json()
+
+    user_id = int(data['user_id'])
+    token = (data['token'])
+
+    user_data = supabase.table('user_table').select('*').eq(
+        'id', user_id).execute().data
+    if (user_data):
+        try:
+            check_user = supabase.table('user_location').select('user_id').eq(
+                'user_id', user_id).execute().data
+
+            if (check_user == []):
+                print('inside none')
+                data = supabase.table('user_location').insert(
+                    {"user_id": user_data[0]['id'], 'user_token': token}).execute()
+            else:
+                print('inside else')
+                data = supabase.table('user_location').update(
+                    {"user_id": user_data[0]['id'], 'user_token': token}).eq("user_id", user_id).execute()
+        except Exception as e:
+            print('inside exception', e)
+        return Response(json.dumps({'message': "successfully added child user"}), status=200)
+
+    return Response(json.dumps({'message': "No Data Available"}), status=200)
+
+
 if __name__ == '__main__':
     app.run(debug=True)
