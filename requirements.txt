@@ -53,6 +53,7 @@ postgrest-py==0.10.3
 proto-plus==1.22.1
 protobuf==4.21.10
 py-vapid==1.8.2
+flask_cors==3.0.10
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 pycodestyle==2.10.0

@@ -6,6 +6,7 @@ import haversine as hs
 from haversine import Unit
 
 from flask import Flask, request, Response, json
+from flask_cors import CORS, cross_origin
 
 import firebase_admin
 from firebase_admin import messaging, credentials
@@ -14,14 +15,20 @@ from firebase_admin import messaging, credentials
 load_dotenv()
 
 cred = credentials.Certificate("./gservice.json")
+# cred = credentials.Certificate("/home/RajSudharshan/DSCNU_ByteWarriors/gservice.json")
 firebase_admin.initialize_app(cred)
 
+
 app = Flask(__name__)
+cors = CORS(app)
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 SUPABASE_PROJECT_URL: str = os.getenv('SUPABASE_PROJECT_URL')
 SUPABASE_API_KEY: str = os.getenv('SUPABASE_API_KEY')
-supabase: Client = create_client(
-    supabase_url=SUPABASE_PROJECT_URL, supabase_key=SUPABASE_API_KEY)
+supabase: Client = create_client(supabase_url="https://bjohjhosfijhzqnrbvug.supabase.co",
+                                 supabase_key='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqb2hqaG9zZmlqaHpxbnJidnVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzAwOTQxNjYsImV4cCI6MTk4NTY3MDE2Nn0.4bcyNUramrQ7zczf0M32pi05BwfODesDK12kYTVYTb4')
+# supabase: Client = create_client(
+#     supabase_url=SUPABASE_PROJECT_URL, supabase_key=SUPABASE_API_KEY)
 
 
 def getJsonValues(data):
@@ -41,8 +48,31 @@ def getDistance(lat1, lat2):
         map(float, lat2.split(','))), unit=Unit.MILES)
     return distance
 
+# @app.route("/push", methods=['POST'])
+
+
+def pushNotify(token):
+    # This registration token comes from the client FCM SDKs.
+    # registration_token = 'YOUR_REGISTRATION_TOKEN'
+    registration_token = token
+
+    # See documentation on defining a message payload.
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title='Push notification successful',
+            body='check'
+        ),
+        token=registration_token,
+    )
+
+    # Send a message to the device corresponding to the provided
+    # registration token.
+    response = messaging.send(message)
+    return response
+
 
 @app.route('/users')
+@cross_origin()
 def getUsers():
 
     response = supabase.table('user_table').select('id', 'user_name').execute()
@@ -51,6 +81,7 @@ def getUsers():
 
 
 @app.route('/login', methods=['POST'])
+@cross_origin()
 def userLogin():
     data = request.get_json()
 
@@ -58,16 +89,20 @@ def userLogin():
     login_user_password = data['password']
 
     user_data = supabase.table('user_table').select(
-        '*').eq('user_name', login_user_name).execute().data
-    user_password = user_data[0]['password']
+        'id', 'password').eq('user_name', login_user_name).execute().data
 
-    if (login_user_password == user_password):
-        return Response(json.dumps({'message': 'Login Successful'}), status=200)
+    if (user_data):
+        print(user_data[0]['id'])
+        user_password = user_data[0]['password']
 
-    return Response(json.dumps({'message': "Incorrect username and password"}), status=400)
+        if (login_user_password == user_password):
+            return Response(json.dumps({'message': 'Login Successful', 'user_id': user_data[0]['id'], 'user_name': login_user_name}), status=200)
+
+    return Response(json.dumps({'message': "Incorrect username and password"}), status=200)
 
 
 @app.route('/getchildid', methods=['POST'])
+@cross_origin()
 def getChildId():
     data = request.get_json()
 
@@ -83,10 +118,11 @@ def getChildId():
         tracked_user_id.count = len(tracked_user_id.data)
 
         return Response(tracked_user_id.json(), status=200)
-    return Response(json.dumps({'message': "Bad Request"}), status=400)
+    return Response(json.dumps({'message': "Bad Request"}), status=200)
 
 
 @app.route('/getchildlocation', methods=['POST'])
+@cross_origin()
 def getChildLocation():
     data = request.get_json()
 
@@ -107,12 +143,14 @@ def getChildLocation():
                 'lat_long').eq('user_id', child_user_id).execute().data
             child_location_lat_long = child_location[0]['lat_long'][-1]
             return Response(json.dumps({'location': child_location_lat_long}), status=200)
-    return Response(json.dumps({'message': "Bad Request"}), status=400)
+    return Response(json.dumps({'message': "Bad Request"}), status=200)
 
 
 @app.route('/checkdistance', methods=['POST'])
+@cross_origin()
 def checkDistance():
     data = request.get_json()
+    registration_token = (data['token'])
 
     parent_user_id = int(data['parent_user_id'])
     child_user_id = int(data['child_user_id'])
@@ -139,44 +177,66 @@ def checkDistance():
             distance = getDistance(
                 parent_location_lat_long, child_location_lat_long)
             print(distance)
-            # if (distance > 0.3):
-            #     push = 0
-            #     if (push):
-            #         return Response(json.dumps({'message': "Push Notification successful"}), status=200)
-            return Response(json.dumps({'distance': distance}), status=200)
-    return Response(json.dumps({'message': "Bad Request"}), status=400)
+            if (distance > 0.3):
+                push_response = pushNotify(registration_token)
+                if (push_response):
+                    return Response(json.dumps({'message': "Push Notification successful", 'response': push_response, 'distance': distance}), status=200)
+            return Response(json.dumps({'message': "invalid token"}), status=200)
+    return Response(json.dumps({'message': "Bad Request"}), status=200)
 
 
-@app.route("/push", methods=['POST'])
-def push():
-    # This registration token comes from the client FCM SDKs.
-    # registration_token = 'YOUR_REGISTRATION_TOKEN'
-    registration_token = request.json.get('sub_token')
+@app.route("/updatelocation", methods=['POST'])
+@cross_origin()
+def updateLocation():
 
-    # See documentation on defining a message payload.
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title='Push notification successful',
-            body='check'
-        ),
-        token=registration_token,
-    )
+    data = request.get_json()
 
-    # Send a message to the device corresponding to the provided
-    # registration token.
-    response = messaging.send(message)
-    # Response is a message ID string.
-    print('Successfully sent message:', response)
-    return Response(response, status=200)
+    user_id = int(data['user_id'])
+    user_lat_long = data['lat_long']
 
-# @app.route("/updatelocation", methods=['POST'])
-# def updateLocation():
+    user_loc_data = supabase.table('user_location').select(
+        'lat_long').eq("user_id", user_id).execute().data
 
-#     data = request.get_json()
+    if (user_loc_data == None):
+        return Response(json.dumps({'message': "No Data Available"}), status=200)
+    elif (user_loc_data):
+        loc_arr = user_loc_data[0]['lat_long']
+        loc_arr.append(str(user_lat_long))
 
-#     user_id = int(data['user_id'])
-#     update_location = supabase.table('user_location').select(
-#         'user_id').eq("user_id", user_id).execute().data
+        if (len(loc_arr) > 5):
+            del loc_arr[0]
+        try:
+            data = supabase.table('user_location').update(
+                {'lat_long': loc_arr}).eq("user_id", user_id).execute()
+        except Exception as e:
+            print('inside exception', e)
+        return Response(json.dumps({'message': "Data Available"}), status=200)
+    return Response(json.dumps({'message': "No Data Available"}), status=200)
+
+
+@app.route('/addchilduser', methods=['POST'])
+@cross_origin()
+def addChildUser():
+
+    data = request.get_json()
+
+    parent_user_id = int(data['parent_user_id'])
+    child_user_id = int(data['child_user_id'])
+
+    parent_user_type = supabase.table('user_table').select('user_type').eq(
+        'id', parent_user_id).execute().data
+    child_user_type = supabase.table('user_table').select('user_type').eq(
+        'id', child_user_id).execute().data
+
+    if (parent_user_type and child_user_type and parent_user_type[0]['user_type'] == 'parent' and child_user_type[0]['user_type'] == 'child'):
+        try:
+            data = supabase.table('track_location').insert(
+                {"user_id": parent_user_id, 'tracking_user_id': child_user_id}).execute()
+        except Exception as e:
+            print('inside exception', e)
+        return Response(json.dumps({'message': "successfully added child user"}), status=200)
+
+    return Response(json.dumps({'message': "No Data Available"}), status=200)
 
 
 if __name__ == '__main__':
